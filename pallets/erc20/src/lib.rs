@@ -10,14 +10,33 @@ mod tests;
 
 #[frame_support::pallet]
 pub mod pallet {
+	use codec::FullCodec;
 	use frame_support::{dispatch::DispatchResult, ensure, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, CheckedSub, Zero};
-
+	use sp_std::{
+		cmp::{Eq, PartialEq},
+		fmt::Debug,
+	};
+	use traits::MultiErc20;
+	
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-		type Balance: Member + Parameter + AtLeast32BitUnsigned + Default + Copy + Zero;
+		type TokenId: FullCodec
+			+ Eq
+			+ PartialEq
+			+ Copy
+			+ MaybeSerializeDeserialize
+			+ Debug
+			+ scale_info::TypeInfo;
+		type Balance: AtLeast32BitUnsigned
+			+ FullCodec
+			+ Copy
+			+ MaybeSerializeDeserialize
+			+ Debug
+			+ Default
+			+ scale_info::TypeInfo;
 	}
 
 	#[pallet::pallet]
@@ -26,21 +45,30 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_total_supply)]
-	pub(super) type TotalSupply<T: Config> = StorageValue<_, T::Balance>;
+	pub(super) type TotalSupply<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::TokenId, T::Balance, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_balance)]
-	pub(super) type Balances<T: Config> =
-		StorageMap<_, Blake2_128Concat, T::AccountId, T::Balance, ValueQuery>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn get_allowance)]
-	pub(super) type Allowances<T: Config> = StorageDoubleMap<
+	pub(super) type Balances<T: Config> = StorageDoubleMap<
 		_,
 		Blake2_128Concat,
 		T::AccountId,
 		Blake2_128Concat,
-		T::AccountId,
+		T::TokenId,
+		T::Balance,
+		ValueQuery,
+	>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn get_allowance)]
+	pub(super) type Allowances<T: Config> = StorageNMap<
+		_,
+		(
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, T::AccountId>,
+			NMapKey<Blake2_128Concat, T::TokenId>,
+		),
 		T::Balance,
 		ValueQuery,
 	>;
@@ -60,32 +88,32 @@ pub mod pallet {
 		AlreadyInitialized,
 		SelfTransfer,
 		ZeroTransfer,
+		WrongInitialization,
 	}
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(100)]
-		pub fn init(origin: OriginFor<T>, initial_supply: T::Balance) -> DispatchResult {
-			match <TotalSupply<T>>::get() {
-				Some(_) => Err(<Error<T>>::AlreadyInitialized)?,
-				None => {
-					let sender = ensure_signed(origin)?;
-					<Balances<T>>::insert(sender.clone(), initial_supply);
-					<TotalSupply<T>>::put(initial_supply);
-					Ok(())
-				}
-			}
+		pub fn init(
+			origin: OriginFor<T>,
+			token_id: T::TokenId,
+			initial_supply: T::Balance,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			<Self as MultiErc20<_>>::init(&sender, &token_id, initial_supply)?;
+			Ok(())
 		}
 
 		#[pallet::weight(1000)]
 		#[transactional]
 		pub fn transfer(
 			origin: OriginFor<T>,
+			token_id: T::TokenId,
 			to: T::AccountId,
 			amount: T::Balance,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			Self::transfer_from_to(&sender, &to, amount)?;
+			<Self as MultiErc20<_>>::transfer(&token_id, &sender, &to, amount)?;
 			Self::deposit_event(Event::Transfer(sender, to, amount));
 			Ok(())
 		}
@@ -94,13 +122,13 @@ pub mod pallet {
 		#[transactional]
 		pub fn transfer_from(
 			origin: OriginFor<T>,
+			token_id: T::TokenId,
 			owner: T::AccountId,
 			spender: T::AccountId,
 			amount: T::Balance,
 		) -> DispatchResult {
 			let _sender = ensure_signed(origin)?;
-			Self::decrease_allowance(&owner, &spender, amount)?;
-			Self::transfer_from_to(&owner, &spender, amount)?;
+			<Self as MultiErc20<_>>::transfer_from(&token_id, &owner, &spender, amount)?;
 			Self::deposit_event(Event::Transfer(owner, spender, amount));
 			Ok(())
 		}
@@ -108,32 +136,61 @@ pub mod pallet {
 		#[pallet::weight(1000)]
 		pub fn approve(
 			origin: OriginFor<T>,
+			token_id: T::TokenId,
 			spender: T::AccountId,
 			amount: T::Balance,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			Self::increase_allowance(&sender, &spender, amount)?;
+			<Self as MultiErc20<_>>::approve(&token_id, &sender, &spender, amount)?;
 			Self::deposit_event(Event::Approval(sender, spender, amount));
 			Ok(())
 		}
 	}
 
-	impl<T: Config> Pallet<T> {
+	impl<T: Config> MultiErc20<T::AccountId> for Pallet<T> {
+		type TokenId = T::TokenId;
+		type Balance = T::Balance;
+
+		fn init(who : &T::AccountId, token_id: &Self::TokenId, initial_supply: Self::Balance) -> DispatchResult {
+			ensure!(!initial_supply.is_zero(), <Error<T>>::WrongInitialization);
+			ensure!(Self::get_total_supply(&token_id).is_zero(), <Error<T>>::AlreadyInitialized);
+			<Balances<T>>::insert(who, token_id, initial_supply);
+			<TotalSupply<T>>::insert(token_id, initial_supply);
+			Ok(())
+		}
+
+		fn total_supply(token_id: Self::TokenId) -> Self::Balance {
+			Self::get_total_supply(token_id)
+		}
+
+		fn balance_of(token_id: Self::TokenId, account: T::AccountId) -> Self::Balance {
+			Self::get_balance(account, token_id)
+		}
+
+		fn allowance(
+			token_id: Self::TokenId,
+			owner: T::AccountId,
+			spender: T::AccountId,
+		) -> Self::Balance {
+			Self::get_allowance((owner, spender, token_id))
+		}
+
 		fn transfer_from_to(
+			token_id: &Self::TokenId,
 			from: &T::AccountId,
 			to: &T::AccountId,
-			amount: T::Balance,
-		) -> Result<(), Error<T>> {
+			amount: Self::Balance,
+		) -> DispatchResult {
 			ensure!(!amount.is_zero(), <Error<T>>::ZeroTransfer);
 			ensure!(from != to, <Error<T>>::SelfTransfer);
 
-			Balances::<T>::try_mutate(&from, |balance| -> Result<(), Error<T>> {
+			Balances::<T>::try_mutate(&from, &token_id, |balance| -> Result<(), Error<T>> {
 				let updated_sender_balance =
 					balance.checked_sub(&amount).ok_or(Error::<T>::InsufficientFunds)?;
 				*balance = updated_sender_balance;
 				Ok(())
 			})?;
-			Balances::<T>::try_mutate(&to, |balance| -> Result<(), Error<T>> {
+			Balances::<T>::try_mutate(&to, &token_id, |balance| -> Result<(), Error<T>> {
 				let updated_to_balance =
 					balance.checked_add(&amount).ok_or(Error::<T>::Overflow)?;
 				*balance = updated_to_balance;
@@ -143,30 +200,42 @@ pub mod pallet {
 		}
 
 		fn increase_allowance(
+			token_id: &Self::TokenId,
 			owner: &T::AccountId,
 			spender: &T::AccountId,
-			amount: T::Balance,
-		) -> Result<(), Error<T>> {
-			Allowances::<T>::try_mutate(owner, spender, |allowance| -> Result<(), Error<T>> {
-				let updated_allowance =
-					allowance.checked_add(&amount).ok_or(Error::<T>::Overflow)?;
-				*allowance = updated_allowance;
-				Ok(())
-			})?;
+			amount: Self::Balance,
+		) -> DispatchResult {
+			Allowances::<T>::try_mutate((
+				owner,
+				spender,
+				token_id),
+				|allowance| -> Result<(), Error<T>> {
+					let updated_sender_allowance =
+						allowance.checked_add(&amount).ok_or(Error::<T>::Overflow)?;
+					*allowance = updated_sender_allowance;
+					Ok(())
+				},
+			)?;
 			Ok(())
 		}
 
 		fn decrease_allowance(
+			token_id: &Self::TokenId,
 			owner: &T::AccountId,
 			spender: &T::AccountId,
-			amount: T::Balance,
-		) -> Result<(), Error<T>> {
-			Allowances::<T>::try_mutate(owner, spender, |allowance| -> Result<(), Error<T>> {
-				let updated_allowance =
-					allowance.checked_sub(&amount).ok_or(Error::<T>::InsufficientAllowance)?;
-				*allowance = updated_allowance;
-				Ok(())
-			})?;
+			amount: Self::Balance,
+		) -> DispatchResult {
+			Allowances::<T>::try_mutate((
+				owner,
+				spender,
+				token_id),
+				|allowance| -> Result<(), Error<T>> {
+					let updated_sender_allowance =
+						allowance.checked_sub(&amount).ok_or(Error::<T>::InsufficientAllowance)?;
+					*allowance = updated_sender_allowance;
+					Ok(())
+				},
+			)?;
 			Ok(())
 		}
 	}

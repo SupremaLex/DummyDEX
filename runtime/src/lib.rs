@@ -275,14 +275,15 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
+impl pallet_erc20::Config for Runtime {
+	type Event = Event;
+	type TokenId = u32;
+	type Balance = Balance;
+}
 /// Configure the pallet-template in pallets/template.
 impl pallet_template::Config for Runtime {
 	type Event = Event;
-}
-
-impl pallet_erc20::Config for Runtime {
-	type Event = Event;
-	type Balance = Balance;
+	type Tokens = Erc20;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -302,7 +303,7 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
-		Erc20Module: pallet_erc20,
+		Erc20: pallet_erc20,
 	}
 );
 

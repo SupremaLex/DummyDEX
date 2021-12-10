@@ -3823,6 +3823,7 @@ dependencies = [
  "sp-io",
  "sp-runtime",
  "sp-std",
+ "traits",
 ]
 
 [[package]]
@@ -3904,11 +3905,15 @@ dependencies = [
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-balances",
+ "pallet-erc20",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-std",
+ "traits",
 ]
 
 [[package]]
@@ -7194,6 +7199,16 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-serde",
+]
+
+[[package]]
+name = "traits"
+version = "0.1.0"
+dependencies = [
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+ "sp-std",
 ]
 
 [[package]]

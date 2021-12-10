@@ -55,6 +55,7 @@ impl system::Config for Test {
 
 impl pallet_erc20::Config for Test {
 	type Event = Event;
+	type TokenId = u32;
 	type Balance = u128;
 }
 
