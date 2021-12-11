@@ -165,6 +165,7 @@ pub mod pallet {
 			decimals: u32
 		) -> DispatchResult {
 			Self::token_uninitialized(token_id)?;
+			//TODO: fix bug - multiply by pow(10, decimals) not by decimals itself
 			let decimal_supply = match decimals {
 				0 => initial_supply,
 				1..=18 => initial_supply.checked_mul(&(decimals.try_into().ok().unwrap())).unwrap(),
