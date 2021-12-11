@@ -13,7 +13,7 @@ pub mod pallet {
 	use codec::FullCodec;
 	use frame_support::{dispatch::DispatchResult, ensure, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, CheckedSub, Zero};
+	use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, CheckedSub, Zero, CheckedMul};
 	use sp_std::{
 		cmp::{Eq, PartialEq},
 		fmt::Debug,
@@ -42,6 +42,11 @@ pub mod pallet {
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
+
+	#[pallet::storage]
+	#[pallet::getter(fn get_decimals)]
+	pub(super) type Decimals<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::TokenId, u32, ValueQuery>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_total_supply)]
@@ -99,9 +104,10 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			token_id: T::TokenId,
 			initial_supply: T::Balance,
+			decimals: u32
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
-			<Self as MultiErc20<_>>::init(&sender, &token_id, initial_supply)?;
+			<Self as MultiErc20<_>>::init(&sender, &token_id, initial_supply, decimals)?;
 			Ok(())
 		}
 
@@ -156,11 +162,18 @@ pub mod pallet {
 			who: &T::AccountId,
 			token_id: &Self::TokenId,
 			initial_supply: Self::Balance,
+			decimals: u32
 		) -> DispatchResult {
 			Self::token_uninitialized(token_id)?;
-			ensure!(!initial_supply.is_zero(), <Error<T>>::WrongInitialization);
-			<Balances<T>>::insert(who, token_id, initial_supply);
-			<TotalSupply<T>>::insert(token_id, initial_supply);
+			let decimal_supply = match decimals {
+				0 => initial_supply,
+				1..=18 => initial_supply.checked_mul(&(decimals.try_into().ok().unwrap())).unwrap(),
+				_ => T::Balance::default(),
+			};
+			ensure!(!decimal_supply.is_zero(), <Error<T>>::WrongInitialization);
+			<Balances<T>>::insert(who, token_id, decimal_supply);
+			<TotalSupply<T>>::insert(token_id, decimal_supply);
+			<Decimals<T>>::insert(token_id, decimals);
 			Ok(())
 		}
 
@@ -169,6 +182,11 @@ pub mod pallet {
 		) -> Result<Self::Balance, sp_runtime::DispatchError> {
 			Self::token_initialized(&token_id)?;
 			Ok(Self::get_total_supply(token_id))
+		}
+
+		fn decimals(token_id: Self::TokenId) -> Result<u32, sp_runtime::DispatchError> {
+			Self::token_initialized(&token_id)?;
+			Ok(Self::get_decimals(token_id))
 		}
 
 		fn balance_of(

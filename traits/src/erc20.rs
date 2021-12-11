@@ -29,9 +29,12 @@ pub trait MultiErc20<AccountId> {
 		who: &AccountId,
 		token_id: &Self::TokenId,
 		initial_supply: Self::Balance,
+		decimals: u32
 	) -> DispatchResult;
 
 	fn total_supply(token_id: Self::TokenId) -> Result<Self::Balance, sp_runtime::DispatchError>;
+
+	fn decimals(token_id: Self::TokenId) -> Result<u32, sp_runtime::DispatchError>;
 
 	fn balance_of(
 		token_id: Self::TokenId,
