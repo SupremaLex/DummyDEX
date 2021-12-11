@@ -82,6 +82,7 @@ pub mod pallet {
 
 	#[pallet::error]
 	pub enum Error<T> {
+		Uninitilized,
 		InsufficientFunds,
 		InsufficientAllowance,
 		Overflow,
@@ -156,27 +157,35 @@ pub mod pallet {
 			token_id: &Self::TokenId,
 			initial_supply: Self::Balance,
 		) -> DispatchResult {
+			Self::token_uninitialized(token_id)?;
 			ensure!(!initial_supply.is_zero(), <Error<T>>::WrongInitialization);
-			ensure!(Self::get_total_supply(&token_id).is_zero(), <Error<T>>::AlreadyInitialized);
 			<Balances<T>>::insert(who, token_id, initial_supply);
 			<TotalSupply<T>>::insert(token_id, initial_supply);
 			Ok(())
 		}
 
-		fn total_supply(token_id: Self::TokenId) -> Self::Balance {
-			Self::get_total_supply(token_id)
+		fn total_supply(
+			token_id: Self::TokenId,
+		) -> Result<Self::Balance, sp_runtime::DispatchError> {
+			Self::token_initialized(&token_id)?;
+			Ok(Self::get_total_supply(token_id))
 		}
 
-		fn balance_of(token_id: Self::TokenId, account: &T::AccountId) -> Self::Balance {
-			Self::get_balance(account, token_id)
+		fn balance_of(
+			token_id: Self::TokenId,
+			account: &T::AccountId,
+		) -> Result<Self::Balance, sp_runtime::DispatchError> {
+			Self::token_initialized(&token_id)?;
+			Ok(Self::get_balance(account, token_id))
 		}
 
 		fn allowance(
 			token_id: Self::TokenId,
 			owner: T::AccountId,
 			spender: T::AccountId,
-		) -> Self::Balance {
-			Self::get_allowance((owner, spender, token_id))
+		) -> Result<Self::Balance, sp_runtime::DispatchError> {
+			Self::token_initialized(&token_id)?;
+			Ok(Self::get_allowance((owner, spender, token_id)))
 		}
 
 		fn transfer_from_to(
@@ -185,6 +194,7 @@ pub mod pallet {
 			to: &T::AccountId,
 			amount: Self::Balance,
 		) -> DispatchResult {
+			Self::token_initialized(token_id)?;
 			ensure!(!amount.is_zero(), <Error<T>>::ZeroTransfer);
 			ensure!(from != to, <Error<T>>::SelfTransfer);
 
@@ -209,6 +219,7 @@ pub mod pallet {
 			spender: &T::AccountId,
 			amount: Self::Balance,
 		) -> DispatchResult {
+			Self::token_initialized(token_id)?;
 			Allowances::<T>::try_mutate(
 				(owner, spender, token_id),
 				|allowance| -> Result<(), Error<T>> {
@@ -227,6 +238,7 @@ pub mod pallet {
 			spender: &T::AccountId,
 			amount: Self::Balance,
 		) -> DispatchResult {
+			Self::token_initialized(token_id)?;
 			Allowances::<T>::try_mutate(
 				(owner, spender, token_id),
 				|allowance| -> Result<(), Error<T>> {
@@ -237,6 +249,20 @@ pub mod pallet {
 				},
 			)?;
 			Ok(())
+		}
+
+		fn token_initialized(token_id: &Self::TokenId) -> DispatchResult {
+			ensure!(Self::is_initialized(token_id), Error::<T>::Uninitilized);
+			Ok(())
+		}
+
+		fn token_uninitialized(token_id: &Self::TokenId) -> DispatchResult {
+			ensure!(!Self::is_initialized(token_id), Error::<T>::AlreadyInitialized);
+			Ok(())
+		}
+
+		fn is_initialized(token_id: &Self::TokenId) -> bool {
+			!Self::get_total_supply(&token_id).is_zero()
 		}
 	}
 }

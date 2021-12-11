@@ -31,11 +31,18 @@ pub trait MultiErc20<AccountId> {
 		initial_supply: Self::Balance,
 	) -> DispatchResult;
 
-	fn total_supply(token_id: Self::TokenId) -> Self::Balance;
+	fn total_supply(token_id: Self::TokenId) -> Result<Self::Balance, sp_runtime::DispatchError>;
 
-	fn balance_of(token_id: Self::TokenId, account: &AccountId) -> Self::Balance;
+	fn balance_of(
+		token_id: Self::TokenId,
+		account: &AccountId,
+	) -> Result<Self::Balance, sp_runtime::DispatchError>;
 
-	fn allowance(token_id: Self::TokenId, owner: AccountId, spender: AccountId) -> Self::Balance;
+	fn allowance(
+		token_id: Self::TokenId,
+		owner: AccountId,
+		spender: AccountId,
+	) -> Result<Self::Balance, sp_runtime::DispatchError>;
 
 	fn transfer(
 		token_id: &Self::TokenId,
@@ -88,4 +95,10 @@ pub trait MultiErc20<AccountId> {
 		spender: &AccountId,
 		amount: Self::Balance,
 	) -> DispatchResult;
+
+	fn token_initialized(token_id: &Self::TokenId) -> DispatchResult;
+
+	fn token_uninitialized(token_id: &Self::TokenId) -> DispatchResult;
+
+	fn is_initialized(token_id: &Self::TokenId) -> bool;
 }
