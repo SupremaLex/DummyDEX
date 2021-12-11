@@ -7,8 +7,8 @@ const TOKEN_1_ID: u32 = 2;
 #[test]
 fn init() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
-		assert_ok!(Erc20::init(Origin::signed(2),TOKEN_1_ID, 999));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(2), TOKEN_1_ID, 999));
 		assert_eq!(Erc20::get_balance(1, TOKEN_0_ID), 1000);
 		assert_eq!(Erc20::get_total_supply(TOKEN_0_ID), 1000);
 		assert_eq!(Erc20::get_balance(2, TOKEN_1_ID), 999);
@@ -19,16 +19,19 @@ fn init() {
 #[test]
 fn failed_init() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_1_ID, 1000));
-		assert_noop!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000), Error::<Test>::AlreadyInitialized);
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_1_ID, 1000));
+		assert_noop!(
+			Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000),
+			Error::<Test>::AlreadyInitialized
+		);
 	});
 }
 
 #[test]
 fn transfer() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
 		assert_ok!(Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 2, 100));
 		assert_eq!(Erc20::get_balance(1, TOKEN_0_ID), 900);
 		assert_eq!(Erc20::get_balance(2, TOKEN_0_ID), 100);
@@ -38,31 +41,40 @@ fn transfer() {
 #[test]
 fn transfer_failed_1() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
-		assert_noop!(Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 1, 100), Error::<Test>::SelfTransfer);
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
+		assert_noop!(
+			Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 1, 100),
+			Error::<Test>::SelfTransfer
+		);
 	});
 }
 
 #[test]
 fn transfer_failed_2() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
-		assert_noop!(Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 2, 1001), Error::<Test>::InsufficientFunds);
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
+		assert_noop!(
+			Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 2, 1001),
+			Error::<Test>::InsufficientFunds
+		);
 	});
 }
 
 #[test]
 fn transfer_failed_3() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
-		assert_noop!(Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 2, 0), Error::<Test>::ZeroTransfer);
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
+		assert_noop!(
+			Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 2, 0),
+			Error::<Test>::ZeroTransfer
+		);
 	});
 }
 
 #[test]
 fn approve() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
 		assert_eq!(Erc20::get_allowance((1, 2, TOKEN_0_ID)), 400);
 	});
@@ -71,7 +83,7 @@ fn approve() {
 #[test]
 fn transfer_from() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
 		assert_eq!(Erc20::get_allowance((1, 2, TOKEN_0_ID)), 400);
 		assert_ok!(Erc20::transfer_from(Origin::signed(3), TOKEN_0_ID, 1, 2, 200));
@@ -84,7 +96,7 @@ fn transfer_from() {
 #[test]
 fn transfer_from_failed_1() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
 		assert_noop!(
 			Erc20::transfer_from(Origin::signed(3), TOKEN_0_ID, 1, 2, 500),
@@ -96,7 +108,7 @@ fn transfer_from_failed_1() {
 #[test]
 fn transfer_from_failed_2() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
 		assert_ok!(Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 3, 1000));
 		assert_noop!(
@@ -109,8 +121,11 @@ fn transfer_from_failed_2() {
 #[test]
 fn transfer_from_failed_3() {
 	new_test_ext().execute_with(|| {
-		assert_ok!(Erc20::init(Origin::signed(1),TOKEN_0_ID, 1000));
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
-		assert_noop!(Erc20::transfer_from(Origin::signed(3), TOKEN_0_ID, 1, 2, 0), Error::<Test>::ZeroTransfer);
+		assert_noop!(
+			Erc20::transfer_from(Origin::signed(3), TOKEN_0_ID, 1, 2, 0),
+			Error::<Test>::ZeroTransfer
+		);
 	});
 }

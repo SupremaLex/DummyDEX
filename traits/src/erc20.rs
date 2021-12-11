@@ -25,11 +25,15 @@ pub trait MultiErc20<AccountId> {
 		+ Default
 		+ scale_info::TypeInfo;
 
-	fn init(who : &AccountId, token_id: &Self::TokenId, initial_supply: Self::Balance) -> DispatchResult;
+	fn init(
+		who: &AccountId,
+		token_id: &Self::TokenId,
+		initial_supply: Self::Balance,
+	) -> DispatchResult;
 
 	fn total_supply(token_id: Self::TokenId) -> Self::Balance;
 
-	fn balance_of(token_id: Self::TokenId, account: AccountId) -> Self::Balance;
+	fn balance_of(token_id: Self::TokenId, account: &AccountId) -> Self::Balance;
 
 	fn allowance(token_id: Self::TokenId, owner: AccountId, spender: AccountId) -> Self::Balance;
 
