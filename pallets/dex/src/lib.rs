@@ -16,9 +16,12 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{ensure, fail, pallet_prelude::*, transactional};
+	use frame_support::{dispatch::DispatchResult, ensure, fail, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, Zero};
+	use sp_runtime::{
+		traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Zero},
+		Perbill
+	};
 	use traits::MultiErc20;
 
 	type BalanceOf<T> =
@@ -51,26 +54,27 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_total_liquidity)]
-	pub(super) type TotalLiquidity<T: Config> =
-		StorageMap<_, Blake2_128Concat, TokenIdOf<T>, BalanceOf<T>, ValueQuery>;
+	pub(super) type TotalLiquidity<T: Config> = StorageValue<_, BalanceOf<T>>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_liquidity)]
-	pub(super) type Liquidity<T: Config> = StorageDoubleMap<
-		_,
-		Blake2_128Concat,
-		T::AccountId,
-		Blake2_128Concat,
-		TokenIdOf<T>,
-		BalanceOf<T>,
-		ValueQuery,
-	>;
+	pub(super) type Liquidity<T: Config> =
+		StorageMap<_, Blake2_128Concat, T::AccountId, BalanceOf<T>, ValueQuery>;
 
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		Initialized(T::AccountId, T::AccountId, TokenIdOf<T>, BalanceOf<T>, TokenIdOf<T>, BalanceOf<T>),
+		Initialized(
+			T::AccountId,
+			T::AccountId,
+			TokenIdOf<T>,
+			BalanceOf<T>,
+			TokenIdOf<T>,
+			BalanceOf<T>,
+		),
 		TokenBought(T::AccountId, TokenIdOf<T>, BalanceOf<T>, TokenIdOf<T>, BalanceOf<T>),
+		Deposited(T::AccountId, TokenIdOf<T>, BalanceOf<T>, TokenIdOf<T>, BalanceOf<T>),
+		Withdrawed(T::AccountId, TokenIdOf<T>, BalanceOf<T>, TokenIdOf<T>, BalanceOf<T>),
 	}
 
 	#[pallet::error]
@@ -79,6 +83,9 @@ pub mod pallet {
 		AlreadyInitialized,
 		WrongInitialization,
 		WrongTokenId,
+		Overflow,
+		WrongShareValue,
+		NoLiquiudity,
 	}
 
 	#[pallet::call]
@@ -101,21 +108,27 @@ pub mod pallet {
 					&& pool_address != T::AccountId::default(),
 				Error::<T>::WrongInitialization
 			);
-			T::Tokens::transfer_from(&first_token_id,&sender,&pool_address, first_token_amount)?;
+			T::Tokens::transfer_from(&first_token_id, &sender, &pool_address, first_token_amount)?;
 			T::Tokens::transfer_from(
 				&second_token_id,
 				&sender,
 				&pool_address,
 				second_token_amount,
 			)?;
-			TotalLiquidity::<T>::insert(first_token_id, first_token_amount);
-			TotalLiquidity::<T>::insert(second_token_id, second_token_amount);
-			Liquidity::<T>::insert(&sender, first_token_id, first_token_amount);
-			Liquidity::<T>::insert(&sender, second_token_id, second_token_amount);
+			let total_liquidity = first_token_amount.checked_add(&second_token_amount).unwrap();
+			TotalLiquidity::<T>::put(total_liquidity);
+			Liquidity::<T>::insert(&sender, total_liquidity);
 			FirstToken::<T>::put(first_token_id);
 			SecondToken::<T>::put(second_token_id);
 			PoolAddress::<T>::put(&pool_address);
-			Self::deposit_event(Event::Initialized(sender, pool_address, first_token_id, first_token_amount, second_token_id, second_token_amount));
+			Self::deposit_event(Event::Initialized(
+				sender,
+				pool_address,
+				first_token_id,
+				first_token_amount,
+				second_token_id,
+				second_token_amount,
+			));
 			Ok(())
 		}
 
@@ -128,6 +141,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			Self::initialized()?;
+			Self::has_liquidity()?;
 			let token_1 = Self::get_first_token().unwrap();
 			let token_2 = Self::get_second_token().unwrap();
 			let token_to_buy = match token_id {
@@ -144,6 +158,77 @@ pub mod pallet {
 			Self::deposit_event(Event::TokenBought(sender, token_id, amount, token_to_buy, bought));
 			Ok(())
 		}
+
+		#[pallet::weight(1000)]
+		#[transactional]
+		pub fn deposit(
+			origin: OriginFor<T>,
+			token_id: TokenIdOf<T>,
+			amount: BalanceOf<T>,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			Self::initialized()?;
+			let token_1 = Self::get_first_token().unwrap();
+			let token_2 = Self::get_second_token().unwrap();
+			let second_token = match token_id {
+				t1 if t1 == token_1 => token_2,
+				t2 if t2 == token_2 => token_1,
+				_ => fail!(Error::<T>::WrongTokenId),
+			};
+			let address = Self::get_pool_address().unwrap();
+			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
+			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
+			let second_token_amount = amount
+				.checked_mul(&second_reserve)
+				.unwrap()
+				.checked_div(&first_reserve)
+				.unwrap();
+
+			Self::increase_liquidity(&sender, amount.checked_add(&second_token_amount).unwrap())?;
+			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
+			T::Tokens::transfer_from(&second_token, &sender, &address, second_token_amount)?;
+			Self::deposit_event(Event::Deposited(
+				sender,
+				token_id,
+				amount,
+				second_token,
+				second_token_amount,
+			));
+			Ok(())
+		}
+
+		#[pallet::weight(1000)]
+		#[transactional]
+		pub fn withdraw(origin: OriginFor<T>, share_percent: u32) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			Self::initialized()?;
+			ensure!(share_percent > 0 && share_percent <= 100, Error::<T>::WrongShareValue);
+			let share_percent = Perbill::from_percent(share_percent);
+
+			let address = Self::get_pool_address().unwrap();
+			let token_1 = Self::get_first_token().unwrap();
+			let token_2 = Self::get_second_token().unwrap();
+			let first_reserve = T::Tokens::balance_of(token_1, &address)?;
+			let second_reserve = T::Tokens::balance_of(token_2, &address)?;
+			let total_liquidity = Self::get_total_liquidity().unwrap();
+
+			let share_percent = share_percent
+				* Perbill::from_rational(Self::get_liquidity(&sender), total_liquidity);
+			let first_token_amount = share_percent * first_reserve;
+			let second_token_amount = share_percent * second_reserve;
+
+			Self::decrease_liquidity(&sender, share_percent * total_liquidity)?;
+			T::Tokens::transfer_from_to(&token_1, &address, &sender, first_token_amount)?;
+			T::Tokens::transfer_from_to(&token_2, &address, &sender, second_token_amount)?;
+			Self::deposit_event(Event::Withdrawed(
+				sender,
+				token_1,
+				first_token_amount,
+				token_2,
+				second_token_amount,
+			));
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -155,16 +240,7 @@ pub mod pallet {
 			input_amount
 				.checked_mul(&output_reserve)
 				.unwrap()
-				.checked_div(
-					&input_reserve.checked_add(&input_amount).unwrap()
-				)
-		}
-
-		fn deposit() {
-			unimplemented!();
-		}
-		fn withdraw() {
-			unimplemented!();
+				.checked_div(&input_reserve.checked_add(&input_amount).unwrap())
 		}
 
 		fn initialized() -> Result<(), Error<T>> {
@@ -177,8 +253,45 @@ pub mod pallet {
 			Ok(())
 		}
 
+		fn has_liquidity() -> Result<(), Error<T>> {
+			ensure!(Self::get_total_liquidity().unwrap() != BalanceOf::<T>::default(), <Error<T>>::NoLiquiudity);
+			Ok(())
+		}
+
 		fn is_initialized() -> bool {
 			Self::get_pool_address().is_some()
+		}
+
+		fn increase_liquidity(owner: &T::AccountId, amount: BalanceOf<T>) -> DispatchResult {
+			TotalLiquidity::<T>::try_mutate(|liquidity| -> Result<(), Error<T>> {
+				let updated_liquidity =
+					liquidity.unwrap().checked_add(&amount).ok_or(Error::<T>::Overflow)?;
+				*liquidity = Some(updated_liquidity);
+				Ok(())
+			})?;
+			Liquidity::<T>::try_mutate(owner, |liquidity| -> Result<(), Error<T>> {
+				let updated_liquidity =
+					liquidity.checked_add(&amount).ok_or(Error::<T>::Overflow)?;
+				*liquidity = updated_liquidity;
+				Ok(())
+			})?;
+			Ok(())
+		}
+
+		fn decrease_liquidity(owner: &T::AccountId, amount: BalanceOf<T>) -> DispatchResult {
+			TotalLiquidity::<T>::try_mutate(|liquidity| -> Result<(), Error<T>> {
+				let updated_liquidity =
+					liquidity.unwrap().checked_sub(&amount).ok_or(Error::<T>::Overflow)?;
+				*liquidity = Some(updated_liquidity);
+				Ok(())
+			})?;
+			Liquidity::<T>::try_mutate(owner, |liquidity| -> Result<(), Error<T>> {
+				let updated_liquidity =
+					liquidity.checked_sub(&amount).ok_or(Error::<T>::Overflow)?;
+				*liquidity = updated_liquidity;
+				Ok(())
+			})?;
+			Ok(())
 		}
 	}
 }
