@@ -6,7 +6,7 @@ const TOKEN_1_ID: u32 = 2;
 const DECIMALS: u32 = 0;
 
 #[test]
-fn init() {
+fn init_should_work_1() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::init(Origin::signed(2), TOKEN_1_ID, 999, DECIMALS));
@@ -20,7 +20,23 @@ fn init() {
 }
 
 #[test]
-fn failed_init() {
+fn init_should_work_2() {
+	new_test_ext().execute_with(|| {
+		const DECIMALS_6: u32 = 6;
+		const MILLION: u128 = (10 as u128).pow(DECIMALS_6);
+		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS_6));
+		assert_ok!(Erc20::init(Origin::signed(2), TOKEN_1_ID, 999, DECIMALS_6));
+		assert_eq!(Erc20::get_balance(1, TOKEN_0_ID), 1000 * MILLION);
+		assert_eq!(Erc20::get_total_supply(TOKEN_0_ID), 1000 * MILLION);
+		assert_eq!(Erc20::get_decimals(TOKEN_0_ID), DECIMALS_6);
+		assert_eq!(Erc20::get_balance(2, TOKEN_1_ID), 999 * MILLION);
+		assert_eq!(Erc20::get_total_supply(TOKEN_1_ID), 999 * MILLION);
+		assert_eq!(Erc20::get_decimals(TOKEN_1_ID), DECIMALS_6);
+	});
+}
+
+#[test]
+fn init_should_fail() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_1_ID, 1000, DECIMALS));
@@ -32,7 +48,7 @@ fn failed_init() {
 }
 
 #[test]
-fn transfer() {
+fn transfer_should_work() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::transfer(Origin::signed(1), TOKEN_0_ID, 2, 100));
@@ -42,7 +58,7 @@ fn transfer() {
 }
 
 #[test]
-fn transfer_failed_1() {
+fn transfer_should_fail_1() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_noop!(
@@ -53,7 +69,7 @@ fn transfer_failed_1() {
 }
 
 #[test]
-fn transfer_failed_2() {
+fn transfer_should_fail_2() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_noop!(
@@ -64,7 +80,7 @@ fn transfer_failed_2() {
 }
 
 #[test]
-fn transfer_failed_3() {
+fn transfer_should_fail_3() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_noop!(
@@ -75,7 +91,7 @@ fn transfer_failed_3() {
 }
 
 #[test]
-fn approve() {
+fn approve_should_work() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
@@ -84,7 +100,7 @@ fn approve() {
 }
 
 #[test]
-fn transfer_from() {
+fn transfer_from_should_work() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
@@ -97,7 +113,7 @@ fn transfer_from() {
 }
 
 #[test]
-fn transfer_from_failed_1() {
+fn transfer_from_should_fail_1() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
@@ -109,7 +125,7 @@ fn transfer_from_failed_1() {
 }
 
 #[test]
-fn transfer_from_failed_2() {
+fn transfer_from_should_fail_2() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));
@@ -122,7 +138,7 @@ fn transfer_from_failed_2() {
 }
 
 #[test]
-fn transfer_from_failed_3() {
+fn transfer_from_should_fail_3() {
 	new_test_ext().execute_with(|| {
 		assert_ok!(Erc20::init(Origin::signed(1), TOKEN_0_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(1), TOKEN_0_ID, 2, 400));

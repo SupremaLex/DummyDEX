@@ -13,7 +13,7 @@ pub mod pallet {
 	use codec::FullCodec;
 	use frame_support::{dispatch::DispatchResult, ensure, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
-	use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, CheckedSub, Zero, CheckedMul};
+	use sp_runtime::traits::{AtLeast32BitUnsigned, CheckedAdd, CheckedMul, CheckedSub, Zero};
 	use sp_std::{
 		cmp::{Eq, PartialEq},
 		fmt::Debug,
@@ -104,7 +104,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			token_id: T::TokenId,
 			initial_supply: T::Balance,
-			decimals: u32
+			decimals: u32,
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			<Self as MultiErc20<_>>::init(&sender, &token_id, initial_supply, decimals)?;
@@ -162,15 +162,12 @@ pub mod pallet {
 			who: &T::AccountId,
 			token_id: &Self::TokenId,
 			initial_supply: Self::Balance,
-			decimals: u32
+			decimals: u32,
 		) -> DispatchResult {
 			Self::token_uninitialized(token_id)?;
-			//TODO: fix bug - multiply by pow(10, decimals) not by decimals itself
-			let decimal_supply = match decimals {
-				0 => initial_supply,
-				1..=18 => initial_supply.checked_mul(&(decimals.try_into().ok().unwrap())).unwrap(),
-				_ => T::Balance::default(),
-			};
+			let decimal_supply = initial_supply
+				.checked_mul(&(10 as u128).checked_pow(decimals).unwrap().try_into().ok().unwrap())
+				.unwrap();
 			ensure!(!decimal_supply.is_zero(), <Error<T>>::WrongInitialization);
 			<Balances<T>>::insert(who, token_id, decimal_supply);
 			<TotalSupply<T>>::insert(token_id, decimal_supply);
