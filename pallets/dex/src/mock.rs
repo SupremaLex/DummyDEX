@@ -1,4 +1,4 @@
-use crate as pallet_template;
+use crate as pallet_dex;
 use frame_support::parameter_types;
 use frame_system as system;
 use pallet_erc20;
@@ -20,7 +20,7 @@ frame_support::construct_runtime!(
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
 		Erc20: pallet_erc20::{Pallet, Call, Storage, Event<T>},
-		TemplateModule: pallet_template::{Pallet, Call, Storage, Event<T>},
+		Dex: pallet_dex::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -80,7 +80,7 @@ impl pallet_erc20::Config for Test {
 	type Balance = u128;
 }
 
-impl pallet_template::Config for Test {
+impl pallet_dex::Config for Test {
 	type Event = Event;
 	type Tokens = Erc20;
 }

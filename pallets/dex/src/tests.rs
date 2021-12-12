@@ -19,7 +19,7 @@ fn init_should_work() {
 		assert_ok!(Erc20::init(Origin::signed(ALICE), TOKEN_2_ID, total_supply, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_1_ID, POOL, total_supply * MIL));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, total_supply * MIL));
-		assert_ok!(TemplateModule::init(
+		assert_ok!(Dex::init(
 			Origin::signed(ALICE),
 			POOL,
 			TOKEN_1_ID,
@@ -27,15 +27,15 @@ fn init_should_work() {
 			TOKEN_2_ID,
 			1000 * MIL
 		));
-		assert_eq!(TemplateModule::get_pool_address(), Some(POOL));
-		assert_eq!(TemplateModule::get_first_token(), Some(TOKEN_1_ID));
-		assert_eq!(TemplateModule::get_second_token(), Some(TOKEN_2_ID));
-		assert_eq!(TemplateModule::get_total_liquidity(TOKEN_1_ID), 100 * MIL);
-		assert_eq!(TemplateModule::get_total_liquidity(TOKEN_2_ID), total_supply * MIL);
-		assert_eq!(TemplateModule::get_liquidity(ALICE, TOKEN_1_ID), 100 * MIL);
-		assert_eq!(TemplateModule::get_liquidity(ALICE, TOKEN_2_ID), total_supply * MIL);
-		assert_eq!(TemplateModule::get_liquidity(BOB, TOKEN_1_ID), 0);
-		assert_eq!(TemplateModule::get_liquidity(BOB, TOKEN_2_ID), 0);
+		assert_eq!(Dex::get_pool_address(), Some(POOL));
+		assert_eq!(Dex::get_first_token(), Some(TOKEN_1_ID));
+		assert_eq!(Dex::get_second_token(), Some(TOKEN_2_ID));
+		assert_eq!(Dex::get_total_liquidity(TOKEN_1_ID), 100 * MIL);
+		assert_eq!(Dex::get_total_liquidity(TOKEN_2_ID), total_supply * MIL);
+		assert_eq!(Dex::get_liquidity(ALICE, TOKEN_1_ID), 100 * MIL);
+		assert_eq!(Dex::get_liquidity(ALICE, TOKEN_2_ID), total_supply * MIL);
+		assert_eq!(Dex::get_liquidity(BOB, TOKEN_1_ID), 0);
+		assert_eq!(Dex::get_liquidity(BOB, TOKEN_2_ID), 0);
 	});
 }
 
@@ -45,7 +45,7 @@ fn init_should_fail_0() {
 		assert_ok!(Erc20::init(Origin::signed(ALICE), TOKEN_1_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::init(Origin::signed(ALICE), TOKEN_2_ID, 1000, DECIMALS));
 		assert_noop!(
-			TemplateModule::init(Origin::signed(ALICE), POOL, TOKEN_1_ID, 100 * MIL, TOKEN_2_ID, 1000 * MIL),
+			Dex::init(Origin::signed(ALICE), POOL, TOKEN_1_ID, 100 * MIL, TOKEN_2_ID, 1000 * MIL),
 			pallet_erc20::Error::<Test>::InsufficientAllowance
 		);
 	});
@@ -60,7 +60,7 @@ fn init_should_fail_1() {
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_1_ID, POOL, 1000 * MIL));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, 1000 * MIL));
 		assert_noop!(
-			TemplateModule::init(Origin::signed(ALICE), POOL, TOKEN_1_ID, 100 * MIL, TOKEN_2_ID, 1000 * MIL),
+			Dex::init(Origin::signed(ALICE), POOL, TOKEN_1_ID, 100 * MIL, TOKEN_2_ID, 1000 * MIL),
 			pallet_erc20::Error::<Test>::InsufficientFunds
 		);
 	});
@@ -70,7 +70,7 @@ fn init_should_fail_1() {
 fn init_should_fail_2() {
 	new_test_ext().execute_with(|| {
 		assert_noop!(
-			TemplateModule::init(Origin::signed(ALICE), POOL, TOKEN_1_ID, 0, TOKEN_2_ID, 0),
+			Dex::init(Origin::signed(ALICE), POOL, TOKEN_1_ID, 0, TOKEN_2_ID, 0),
 			Error::<Test>::WrongInitialization
 		);
 	});
@@ -80,7 +80,7 @@ fn init_should_fail_2() {
 fn init_should_fail_3() {
 	new_test_ext().execute_with(|| {
 		assert_noop!(
-			TemplateModule::init(Origin::signed(ALICE), 0, TOKEN_1_ID, 100, TOKEN_2_ID, 1000),
+			Dex::init(Origin::signed(ALICE), 0, TOKEN_1_ID, 100, TOKEN_2_ID, 1000),
 			Error::<Test>::WrongInitialization
 		);
 	});
@@ -94,7 +94,7 @@ fn init_should_fail_4() {
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_1_ID, POOL, 1000 * MIL));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, 1000 * MIL));
 		assert_noop!(
-			TemplateModule::init(Origin::signed(ALICE), POOL, 3, 100 * MIL, 4, 1000 * MIL),
+			Dex::init(Origin::signed(ALICE), POOL, 3, 100 * MIL, 4, 1000 * MIL),
 			pallet_erc20::Error::<Test>::Uninitilized
 		);
 	});
@@ -107,7 +107,7 @@ fn buy_token_should_work_1() {
 		assert_ok!(Erc20::init(Origin::signed(ALICE), TOKEN_2_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_1_ID, POOL, 1000 * MIL));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, 1000 * MIL));
-		assert_ok!(TemplateModule::init(
+		assert_ok!(Dex::init(
 			Origin::signed(ALICE),
 			POOL,
 			TOKEN_1_ID,
@@ -115,11 +115,11 @@ fn buy_token_should_work_1() {
 			TOKEN_2_ID,
 			1000 * MIL
 		));
-		assert_ok!(TemplateModule::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL));
+		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(800000000));
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(500000000)); // 100 * 1000 / (100 + 100) = 500
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, 1000 * MIL));
-		assert_ok!(TemplateModule::buy_token(Origin::signed(ALICE), TOKEN_2_ID, 235 * MIL));
+		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_2_ID, 235 * MIL));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(863945578)); // 234 * 200 / (500 + 235) ~ 63.945578
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(265000000));
 	});
@@ -132,7 +132,7 @@ fn buy_token_should_work_2() {
 		assert_ok!(Erc20::init(Origin::signed(ALICE), TOKEN_2_ID, 1000, DECIMALS));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_1_ID, POOL, 1000 * MIL));
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, 1000 * MIL));
-		assert_ok!(TemplateModule::init(
+		assert_ok!(Dex::init(
 			Origin::signed(ALICE),
 			POOL,
 			TOKEN_1_ID,
@@ -140,7 +140,7 @@ fn buy_token_should_work_2() {
 			TOKEN_2_ID,
 			1000 * MIL
 		));
-		assert_ok!(TemplateModule::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 1 * MIL));
+		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 1 * MIL));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(899000000));
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(9900990)); // 1 * 1000 / (100 + 1) ~ 9.90099
 	});
