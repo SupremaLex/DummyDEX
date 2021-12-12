@@ -41,7 +41,7 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
-pub use pallet_template;
+pub use pallet_dex;
 pub use pallet_erc20;
 
 /// An index to a block.
@@ -280,8 +280,8 @@ impl pallet_erc20::Config for Runtime {
 	type TokenId = u32;
 	type Balance = Balance;
 }
-/// Configure the pallet-template in pallets/template.
-impl pallet_template::Config for Runtime {
+
+impl pallet_dex::Config for Runtime {
 	type Event = Event;
 	type Tokens = Erc20;
 }
@@ -301,8 +301,7 @@ construct_runtime!(
 		Balances: pallet_balances,
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
-		// Include the custom logic from the pallet-template in the runtime.
-		TemplateModule: pallet_template,
+		Dex: pallet_dex,
 		Erc20: pallet_erc20,
 	}
 );
