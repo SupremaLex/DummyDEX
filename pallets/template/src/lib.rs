@@ -16,87 +16,169 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::pallet_prelude::*;
+	use frame_support::{ensure, fail, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
+	use sp_runtime::traits::{CheckedAdd, CheckedDiv, CheckedMul, Zero};
+	use traits::MultiErc20;
 
-	/// Configure the pallet by specifying the parameters and types on which it depends.
+	type BalanceOf<T> =
+		<<T as Config>::Tokens as MultiErc20<<T as frame_system::Config>::AccountId>>::Balance;
+
+	type TokenIdOf<T> =
+		<<T as Config>::Tokens as MultiErc20<<T as frame_system::Config>::AccountId>>::TokenId;
+
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
-		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
+		type Tokens: MultiErc20<Self::AccountId>;
 	}
 
 	#[pallet::pallet]
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// The pallet's runtime storage items.
-	// https://docs.substrate.io/v3/runtime/storage
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://docs.substrate.io/v3/runtime/storage#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+	#[pallet::getter(fn get_pool_address)]
+	pub(super) type PoolAddress<T: Config> = StorageValue<_, T::AccountId>;
 
-	// Pallets use events to inform users when important changes are made.
-	// https://docs.substrate.io/v3/runtime/events-and-errors
+	#[pallet::storage]
+	#[pallet::getter(fn get_first_token)]
+	pub(super) type FirstToken<T: Config> = StorageValue<_, TokenIdOf<T>>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn get_second_token)]
+	pub(super) type SecondToken<T: Config> = StorageValue<_, TokenIdOf<T>>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn get_total_liquidity)]
+	pub(super) type TotalLiquidity<T: Config> =
+		StorageMap<_, Blake2_128Concat, TokenIdOf<T>, BalanceOf<T>, ValueQuery>;
+
+	#[pallet::storage]
+	#[pallet::getter(fn get_liquidity)]
+	pub(super) type Liquidity<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		T::AccountId,
+		Blake2_128Concat,
+		TokenIdOf<T>,
+		BalanceOf<T>,
+		ValueQuery,
+	>;
+
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
+		Initialized(T::AccountId, T::AccountId, TokenIdOf<T>, BalanceOf<T>, TokenIdOf<T>, BalanceOf<T>),
+		TokenBought(T::AccountId, TokenIdOf<T>, BalanceOf<T>, TokenIdOf<T>, BalanceOf<T>),
 	}
 
-	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
+		Uninitilized,
+		AlreadyInitialized,
+		WrongInitialization,
+		WrongTokenId,
 	}
 
-	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
-	// These functions materialize as "extrinsics", which are often compared to transactions.
-	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
-		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://docs.substrate.io/v3/runtime/origins
-			let who = ensure_signed(origin)?;
-
-			// Update storage.
-			<Something<T>>::put(something);
-
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored(something, who));
-			// Return a successful DispatchResultWithPostInfo
+		#[pallet::weight(1000)]
+		#[transactional]
+		pub fn init(
+			origin: OriginFor<T>,
+			pool_address: T::AccountId,
+			first_token_id: TokenIdOf<T>,
+			first_token_amount: BalanceOf<T>,
+			second_token_id: TokenIdOf<T>,
+			second_token_amount: BalanceOf<T>,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			Self::uninitialized()?;
+			ensure!(
+				!first_token_amount.is_zero()
+					&& !second_token_amount.is_zero()
+					&& pool_address != T::AccountId::default(),
+				Error::<T>::WrongInitialization
+			);
+			T::Tokens::transfer_from(&first_token_id,&sender,&pool_address, first_token_amount)?;
+			T::Tokens::transfer_from(
+				&second_token_id,
+				&sender,
+				&pool_address,
+				second_token_amount,
+			)?;
+			TotalLiquidity::<T>::insert(first_token_id, first_token_amount);
+			TotalLiquidity::<T>::insert(second_token_id, second_token_amount);
+			Liquidity::<T>::insert(&sender, first_token_id, first_token_amount);
+			Liquidity::<T>::insert(&sender, second_token_id, second_token_amount);
+			FirstToken::<T>::put(first_token_id);
+			SecondToken::<T>::put(second_token_id);
+			PoolAddress::<T>::put(&pool_address);
+			Self::deposit_event(Event::Initialized(sender, pool_address, first_token_id, first_token_amount, second_token_id, second_token_amount));
 			Ok(())
 		}
 
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
+		#[pallet::weight(1000)]
+		#[transactional]
+		pub fn buy_token(
+			origin: OriginFor<T>,
+			token_id: TokenIdOf<T>,
+			amount: BalanceOf<T>,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			Self::initialized()?;
+			let token_1 = Self::get_first_token().unwrap();
+			let token_2 = Self::get_second_token().unwrap();
+			let token_to_buy = match token_id {
+				t1 if t1 == token_1 => token_2,
+				t2 if t2 == token_2 => token_1,
+				_ => fail!(Error::<T>::WrongTokenId),
+			};
+			let address = Self::get_pool_address().unwrap();
+			let input_reserve = T::Tokens::balance_of(token_id, &address)?;
+			let output_reserve = T::Tokens::balance_of(token_to_buy, &address)?;
+			let bought = Self::price(amount, input_reserve, output_reserve).unwrap();
+			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
+			T::Tokens::transfer_from_to(&token_to_buy, &address, &sender, bought)?;
+			Self::deposit_event(Event::TokenBought(sender, token_id, amount, token_to_buy, bought));
+			Ok(())
+		}
+	}
 
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue)?,
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
+	impl<T: Config> Pallet<T> {
+		fn price(
+			input_amount: BalanceOf<T>,
+			input_reserve: BalanceOf<T>,
+			output_reserve: BalanceOf<T>,
+		) -> Option<BalanceOf<T>> {
+			input_amount
+				.checked_mul(&output_reserve)
+				.unwrap()
+				.checked_div(
+					&input_reserve.checked_add(&input_amount).unwrap()
+				)
+		}
+
+		fn deposit() {
+			unimplemented!();
+		}
+		fn withdraw() {
+			unimplemented!();
+		}
+
+		fn initialized() -> Result<(), Error<T>> {
+			ensure!(Self::is_initialized(), <Error<T>>::Uninitilized);
+			Ok(())
+		}
+
+		fn uninitialized() -> Result<(), Error<T>> {
+			ensure!(!Self::is_initialized(), <Error<T>>::AlreadyInitialized);
+			Ok(())
+		}
+
+		fn is_initialized() -> bool {
+			Self::get_pool_address().is_some()
 		}
 	}
 }
