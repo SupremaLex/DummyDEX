@@ -112,23 +112,11 @@ fn buy_token_should_work_1() {
 		init_dex(100, 1000);
 		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(800000000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(500000000)); // 100 * 1000 / (100 + 100) = 500
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(497487437)); // 0.99 * 100 * 1000 / (100 + 99) = 497.487437
 		assert_ok!(Erc20::approve(Origin::signed(ALICE), TOKEN_2_ID, POOL, 1000 * MIL));
 		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_2_ID, 235 * MIL));
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(863945578)); // 234 * 200 / (500 + 235) ~ 63.945578
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(265000000));
-	});
-}
-
-#[test]
-fn buy_token_should_work_2() {
-	new_test_ext().execute_with(|| {
-		init_tokens(1000);
-		approve(ALICE,1000);
-		init_dex(100, 1000);
-		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 1 * MIL));
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(899000000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(9900990)); // 1 * 1000 / (100 + 1) ~ 9.90099
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(863292123)); // 0.99 * 235 * 200 / (502.512563 + 232.65) = 63.292123
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(262487437));
 	});
 }
 
@@ -168,11 +156,13 @@ fn withdraw_should_work_1() {
 	new_test_ext().execute_with(|| {
 		init_tokens(1000);
 		approve(ALICE,1000);
+		assert_ok!(Erc20::transfer(Origin::signed(ALICE), TOKEN_1_ID, BOB, 100 * MIL));
+		approve(BOB,1000);
 		init_dex(100, 1000);
-		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL)); // 100x1000 => 200x500
+		assert_ok!(Dex::buy_token(Origin::signed(BOB), TOKEN_1_ID, 100 * MIL)); // 0.99 * 100 * 1000 / (100 + 99) = 497.487437
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 15)); // 15%
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(830000000)); // 800 + 200 * 0.15 = 830
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(575000000)); // 500 + 500 * 0.15 = 575
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(75376884)); // 0 + 502.512563 * 0.15 = 575.376884
 		assert_eq!(Dex::get_liquidity(ALICE), 935000000); // ~ 1100 * 0.85 = 935
 	});
 }
@@ -182,12 +172,16 @@ fn withdraw_should_work_2() {
 	new_test_ext().execute_with(|| {
 		init_tokens(1000);
 		approve(ALICE,1000);
+		assert_ok!(Erc20::transfer(Origin::signed(ALICE), TOKEN_1_ID, BOB, 100 * MIL));
+		approve(BOB,1000);
 		init_dex(100, 1000);
-		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL)); // 100x1000 => 200x500
+		assert_ok!(Dex::buy_token(Origin::signed(BOB), TOKEN_1_ID, 100 * MIL));
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(200000000));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(502512563));
 		assert_eq!(Dex::get_liquidity(ALICE), 1100 * MIL);
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 100));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(1000000000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(1000000000));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(502512563));
 		assert_eq!(Dex::get_liquidity(ALICE), 0);
 	});
 }
@@ -219,13 +213,13 @@ fn deposit_withdraw_should_work_1() {
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(400000000));
 		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(300000000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(266666667));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(267558529));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(700000000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(733333333));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(732441471));
 		assert_eq!(Dex::get_liquidity(ALICE), 300000000);
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 50)); // 50%
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(775000000)); // 700 + 300 * 0.5 * 0.5 = 775
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(800000000)); // 733.(3) + 266.(6) * 0.5 * 0.5 = 800
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(799331103)); // 733.(3) + 266.(6) * 0.5 * 0.5 = 800
 		assert_eq!(Dex::get_liquidity(ALICE), 150000000); // ~ 300 * 0.5 = 550
 	});
 }
@@ -273,40 +267,42 @@ fn general_test() {
 		init_dex(500, 1000); // 500x1000
 		assert_eq!(Dex::get_total_liquidity().unwrap(), 1500000000);
 
-		assert_ok!(Dex::buy_token(Origin::signed(BOB), TOKEN_1_ID, 100 * MIL)); //600x833.(3)
+		assert_ok!(Dex::buy_token(Origin::signed(BOB), TOKEN_1_ID, 100 * MIL)); //600x834.724541
 		assert_eq!(Dex::get_total_liquidity().unwrap(), 1500000000);
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(600000000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(833333334));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(834724541));
 
-		assert_ok!(Dex::deposit(Origin::signed(BOB), TOKEN_2_ID, 50 * MIL)); // 650x883.(3)
-		assert_eq!(Dex::get_total_liquidity().unwrap(), 1585999999);
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(635999999));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(883333334));
+		assert_ok!(Dex::deposit(Origin::signed(BOB), TOKEN_2_ID, 50 * MIL));
+		assert_eq!(Dex::get_total_liquidity().unwrap(), 1585939999);
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(635939999));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(884724541));
 
-		assert_ok!(Dex::deposit(Origin::signed(CHARLIE), TOKEN_2_ID, 250 * MIL)); // 815.(9)x1133.(3)
-		assert_eq!(Dex::get_total_liquidity().unwrap(), 2015999998);
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(815999998));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(1133333334));
+		assert_ok!(Dex::deposit(Origin::signed(CHARLIE), TOKEN_2_ID, 250 * MIL));
+		assert_eq!(Dex::get_total_liquidity().unwrap(), 2015639998);
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(815639998));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(1134724541));
 
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 50));
-		assert_eq!(Dex::get_total_liquidity().unwrap(), 1265999998);
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(512428570));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(711706349));
+		assert_eq!(Dex::get_total_liquidity().unwrap(), 1265639999);
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(512148304));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(712504598));
 
 		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 500 * MIL));
-		assert_eq!(Dex::get_total_liquidity().unwrap(), 1265999998);
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(1012428570));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(360221627));
+		assert_eq!(Dex::get_total_liquidity().unwrap(), 1265639999);
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(1012148304));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(362318062));
 
 		assert_ok!(Dex::withdraw(Origin::signed(CHARLIE), 100));
 		assert_ok!(Dex::withdraw(Origin::signed(BOB), 100));
 		assert_eq!(Dex::get_total_liquidity().unwrap(), 750000002);
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(599779961));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(213401439));
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(599784482));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(214704456));
 
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 100));
 		assert_eq!(Dex::get_total_liquidity().unwrap(), 2); // 0.000002
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(2));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(1));
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(1));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(0));
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(1903276175));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(1987110935));
 	});
 }

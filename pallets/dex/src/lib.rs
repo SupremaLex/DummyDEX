@@ -30,6 +30,8 @@ pub mod pallet {
 	type TokenIdOf<T> =
 		<<T as Config>::Tokens as MultiErc20<<T as frame_system::Config>::AccountId>>::TokenId;
 
+	const FEE: Perbill = Perbill::from_percent(99); // 1% per trade
+
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
@@ -153,6 +155,7 @@ pub mod pallet {
 			let input_reserve = T::Tokens::balance_of(token_id, &address)?;
 			let output_reserve = T::Tokens::balance_of(token_to_buy, &address)?;
 			let bought = Self::price(amount, input_reserve, output_reserve).unwrap();
+			println!("{:?}", bought);
 			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
 			T::Tokens::transfer_from_to(&token_to_buy, &address, &sender, bought)?;
 			Self::deposit_event(Event::TokenBought(sender, token_id, amount, token_to_buy, bought));
@@ -237,10 +240,10 @@ pub mod pallet {
 			input_reserve: BalanceOf<T>,
 			output_reserve: BalanceOf<T>,
 		) -> Option<BalanceOf<T>> {
-			input_amount
-				.checked_mul(&output_reserve)
+			let input_amount_with_fee = FEE * input_amount;
+			input_amount_with_fee.checked_mul(&output_reserve)
 				.unwrap()
-				.checked_div(&input_reserve.checked_add(&input_amount).unwrap())
+				.checked_div(&input_reserve.checked_add(&input_amount_with_fee).unwrap())
 		}
 
 		fn initialized() -> Result<(), Error<T>> {
