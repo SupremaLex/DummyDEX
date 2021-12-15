@@ -155,7 +155,7 @@ pub mod pallet {
 			let input_reserve = T::Tokens::balance_of(token_id, &address)?;
 			let output_reserve = T::Tokens::balance_of(token_to_buy, &address)?;
 			let bought = Self::price(amount, input_reserve, output_reserve).unwrap();
-			println!("{:?}", bought);
+
 			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
 			T::Tokens::transfer_from_to(&token_to_buy, &address, &sender, bought)?;
 			Self::deposit_event(Event::TokenBought(sender, token_id, amount, token_to_buy, bought));
