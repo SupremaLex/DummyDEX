@@ -16,11 +16,11 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{dispatch::DispatchResult, ensure, fail, pallet_prelude::*, transactional};
+	use frame_support::{dispatch::DispatchResult, ensure, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::{
 		traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Zero},
-		Perbill
+		Perbill,
 	};
 	use traits::MultiErc20;
 
@@ -88,6 +88,7 @@ pub mod pallet {
 		Overflow,
 		WrongShareValue,
 		NoLiquiudity,
+		NoLiquiudityToWithdraw,
 	}
 
 	#[pallet::call]
@@ -144,20 +145,14 @@ pub mod pallet {
 			let sender = ensure_signed(origin)?;
 			Self::initialized()?;
 			Self::has_liquidity()?;
-			let token_1 = Self::get_first_token().unwrap();
-			let token_2 = Self::get_second_token().unwrap();
-			let token_to_buy = match token_id {
-				t1 if t1 == token_1 => token_2,
-				t2 if t2 == token_2 => token_1,
-				_ => fail!(Error::<T>::WrongTokenId),
-			};
+			let token_to_buy = Self::get_paired_token(token_id).unwrap();
 			let address = Self::get_pool_address().unwrap();
 			let input_reserve = T::Tokens::balance_of(token_id, &address)?;
 			let output_reserve = T::Tokens::balance_of(token_to_buy, &address)?;
 			let bought = Self::price(amount, input_reserve, output_reserve).unwrap();
 
 			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
-			T::Tokens::transfer_from_to(&token_to_buy, &address, &sender, bought)?;
+			T::Tokens::transfer(&token_to_buy, &address, &sender, bought)?;
 			Self::deposit_event(Event::TokenBought(sender, token_id, amount, token_to_buy, bought));
 			Ok(())
 		}
@@ -171,13 +166,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			Self::initialized()?;
-			let token_1 = Self::get_first_token().unwrap();
-			let token_2 = Self::get_second_token().unwrap();
-			let second_token = match token_id {
-				t1 if t1 == token_1 => token_2,
-				t2 if t2 == token_2 => token_1,
-				_ => fail!(Error::<T>::WrongTokenId),
-			};
+			let second_token = Self::get_paired_token(token_id).unwrap();
 			let address = Self::get_pool_address().unwrap();
 			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
 			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
@@ -221,14 +210,68 @@ pub mod pallet {
 			let second_token_amount = share_percent * second_reserve;
 
 			Self::decrease_liquidity(&sender, share_percent * total_liquidity)?;
-			T::Tokens::transfer_from_to(&token_1, &address, &sender, first_token_amount)?;
-			T::Tokens::transfer_from_to(&token_2, &address, &sender, second_token_amount)?;
+			T::Tokens::transfer(&token_1, &address, &sender, first_token_amount)?;
+			T::Tokens::transfer(&token_2, &address, &sender, second_token_amount)?;
 			Self::deposit_event(Event::Withdrawed(
 				sender,
 				token_1,
 				first_token_amount,
 				token_2,
 				second_token_amount,
+			));
+			Ok(())
+		}
+
+		#[pallet::weight(1000)]
+		#[transactional]
+		pub fn withdraw_token(
+			origin: OriginFor<T>,
+			token_id: TokenIdOf<T>,
+			share_percent: u32,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			Self::initialized()?;
+			ensure!(share_percent > 0 && share_percent <= 100, Error::<T>::WrongShareValue);
+			let share_percent =
+				Perbill::from_percent(share_percent) * Self::get_pool_share(&sender);
+			ensure!(share_percent != Perbill::from_percent(0), Error::<T>::NoLiquiudityToWithdraw);
+
+			let address = Self::get_pool_address().unwrap();
+			let second_token = Self::get_paired_token(token_id).unwrap();
+			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
+			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
+			let total_liquidity = Self::get_total_liquidity().unwrap();
+
+			let first_token_amount = share_percent * first_reserve;
+			let second_token_amount = share_percent * second_reserve;
+
+			let bought_first_token = Self::price(
+				second_token_amount,
+				second_reserve,
+				first_reserve.checked_sub(&first_token_amount).unwrap(),
+			)
+			.unwrap();
+
+			Self::decrease_liquidity(&sender, share_percent * total_liquidity)?;
+			T::Tokens::transfer(
+				&token_id,
+				&address,
+				&sender,
+				first_token_amount.checked_add(&bought_first_token).unwrap(),
+			)?;
+			Self::deposit_event(Event::Withdrawed(
+				sender.clone(),
+				token_id,
+				first_token_amount,
+				second_token,
+				BalanceOf::<T>::default(),
+			));
+			Self::deposit_event(Event::TokenBought(
+				sender,
+				second_token,
+				second_token_amount,
+				token_id,
+				bought_first_token,
 			));
 			Ok(())
 		}
@@ -241,9 +284,40 @@ pub mod pallet {
 			output_reserve: BalanceOf<T>,
 		) -> Option<BalanceOf<T>> {
 			let input_amount_with_fee = FEE * input_amount;
-			input_amount_with_fee.checked_mul(&output_reserve)
+			input_amount_with_fee
+				.checked_mul(&output_reserve)
 				.unwrap()
 				.checked_div(&input_reserve.checked_add(&input_amount_with_fee).unwrap())
+		}
+
+		fn get_paired_token(token_id: TokenIdOf<T>) -> Option<TokenIdOf<T>> {
+			let token_1 = Self::get_first_token().unwrap();
+			let token_2 = Self::get_second_token().unwrap();
+			match token_id {
+				t1 if t1 == token_1 => Some(token_2),
+				t2 if t2 == token_2 => Some(token_1),
+				_ => None,
+			}
+		}
+
+		pub fn get_pool_share(owner: &T::AccountId) -> Perbill {
+			Perbill::from_rational(
+				Self::get_liquidity(&owner),
+				Self::get_total_liquidity().unwrap(),
+			)
+		}
+
+		pub fn get_reward(owner: &T::AccountId) -> BalanceOf<T> {
+			Self::get_pool_share(owner) * Self::get_total_reward().unwrap()
+		}
+
+		pub fn get_total_reward() -> Result<BalanceOf<T>, sp_runtime::DispatchError> {
+			let address = Self::get_pool_address().unwrap();
+			let token_1 = Self::get_first_token().unwrap();
+			let token_2 = Self::get_second_token().unwrap();
+			let liquidity_with_fees = T::Tokens::balance_of(token_1, &address)?
+				+ T::Tokens::balance_of(token_2, &address)?;
+			Ok(liquidity_with_fees.checked_sub(&Self::get_total_liquidity().unwrap()).unwrap())
 		}
 
 		fn initialized() -> Result<(), Error<T>> {
@@ -257,7 +331,10 @@ pub mod pallet {
 		}
 
 		fn has_liquidity() -> Result<(), Error<T>> {
-			ensure!(Self::get_total_liquidity().unwrap() != BalanceOf::<T>::default(), <Error<T>>::NoLiquiudity);
+			ensure!(
+				Self::get_total_liquidity().unwrap() != BalanceOf::<T>::default(),
+				<Error<T>>::NoLiquiudity
+			);
 			Ok(())
 		}
 
