@@ -190,9 +190,9 @@ fn withdraw_should_work_2() {
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(502_512_563));
 		assert_eq!(Dex::get_liquidity(ALICE), 1100 * MIL);
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 90));
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(1000_000_000));
-		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(502_512_563));
-		assert_eq!(Dex::get_liquidity(ALICE), 0);
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(1080_000_000));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(452_261_307));
+		assert_eq!(Dex::get_liquidity(ALICE), 110_000_000);
 	});
 }
 
@@ -272,11 +272,11 @@ fn deposit_withdraw_should_work_1() {
 		assert_ok!(Dex::buy_token(Origin::signed(ALICE), TOKEN_1_ID, 100 * MIL));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(300_000_000));
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(267_558_529));
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(700_000_000));
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(600_000_000));
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(732_441_471));
 		assert_eq!(Dex::get_liquidity(ALICE), 300_000_000);
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 50)); // 50%
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(775_000_000)); // 700 + 300 * 0.5 * 0.5 = 775
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(675_000_000)); // 700 + 300 * 0.5 * 0.5 = 775
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(799_331_103)); // 733.(3) + 266.(6) * 0.5 * 0.5 = 800
 		assert_eq!(Dex::get_liquidity(ALICE), 150_000_000); // ~ 300 * 0.5 = 550
 	});
