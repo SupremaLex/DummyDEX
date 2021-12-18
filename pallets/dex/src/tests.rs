@@ -162,6 +162,22 @@ fn deposit_should_work_1() {
 }
 
 #[test]
+fn deposit_single_token_should_work_1() {
+	new_test_ext().execute_with(|| {
+		init_tokens(1000);
+		approve(ALICE, 1000);
+		transfer(ALICE, BOB, 300);
+		approve(BOB, 1000);
+		init_dex(100, 100);
+		assert_ok!(Dex::deposit_single_token(Origin::signed(BOB), TOKEN_1_ID, 10 * MIL));
+		// due to token swap(and fee) the liquidity of BOB is 9.526565 instead of 10, in case of deposit of 5 tokens
+		assert_eq!(Dex::get_liquidity(BOB), 9_526_565);
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(110_000_000));
+		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(100_000_000));
+	});
+}
+
+#[test]
 fn withdraw_should_work_1() {
 	new_test_ext().execute_with(|| {
 		init_tokens(1100);
@@ -197,14 +213,14 @@ fn withdraw_should_work_2() {
 }
 
 #[test]
-fn withdraw_token_should_work_1() {
+fn withdraw_single_token_should_work_1() {
 	new_test_ext().execute_with(|| {
 		init_tokens(1000);
 		approve(ALICE, 1000);
 		init_dex(100, 100);
 		assert_eq!(Dex::get_liquidity(ALICE), 200 * MIL);
 		// withdraw 50% of token_1 and buy token_1 for 50% of token_2 share
-		assert_ok!(Dex::withdraw_token(Origin::signed(ALICE), TOKEN_1_ID, 50)); // 50 + 0.99 * 50 * 50 / (100 + 0.99 * 50) = 50 + 16.555183
+		assert_ok!(Dex::withdraw_single_token(Origin::signed(ALICE), TOKEN_1_ID, 50)); // 50 + 0.99 * 50 * 50 / (100 + 0.99 * 50) = 50 + 16.555183
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(334_448_17));
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(100_000_000));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(966_555_183));
@@ -219,7 +235,7 @@ fn withdraw_token_should_work_1() {
 }
 
 #[test]
-fn withdraw_token_should_work_2() {
+fn withdraw_single_token_should_work_2() {
 	new_test_ext().execute_with(|| {
 		init_tokens(200);
 		approve(ALICE, 200);
@@ -232,7 +248,7 @@ fn withdraw_token_should_work_2() {
 		assert_eq!(Dex::get_pool_share(&ALICE), Perbill::from_percent(50));
 		assert_eq!(Dex::get_pool_share(&BOB), Perbill::from_percent(50));
 		// withdraw 50% of token_1 and buy token_1 for 50% of token_2 share
-		assert_ok!(Dex::withdraw_token(Origin::signed(ALICE), TOKEN_1_ID, 75)); // 75 + 0.99 * 75 * 125 / (200 + 0.99 * 75) = 75 + 33.842297
+		assert_ok!(Dex::withdraw_single_token(Origin::signed(ALICE), TOKEN_1_ID, 75)); // 75 + 0.99 * 75 * 125 / (200 + 0.99 * 75) = 75 + 33.842297
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &POOL), Ok(91_157_703)); // 91.157703
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &POOL), Ok(200_000_000));
 		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(108_842_297));
@@ -276,7 +292,7 @@ fn deposit_withdraw_should_work_1() {
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(732_441_471));
 		assert_eq!(Dex::get_liquidity(ALICE), 300_000_000);
 		assert_ok!(Dex::withdraw(Origin::signed(ALICE), 50)); // 50%
-		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(675_000_000)); // 700 + 300 * 0.5 * 0.5 = 775
+		assert_eq!(Erc20::balance_of(TOKEN_1_ID, &ALICE), Ok(675_000_000)); // 600 + 300 * 0.5 * 0.5 = 775
 		assert_eq!(Erc20::balance_of(TOKEN_2_ID, &ALICE), Ok(799_331_103)); // 733.(3) + 266.(6) * 0.5 * 0.5 = 800
 		assert_eq!(Dex::get_liquidity(ALICE), 150_000_000); // ~ 300 * 0.5 = 550
 	});

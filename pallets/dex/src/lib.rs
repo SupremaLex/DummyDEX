@@ -19,7 +19,7 @@ pub mod pallet {
 	use frame_support::{dispatch::DispatchResult, ensure, pallet_prelude::*, transactional};
 	use frame_system::pallet_prelude::*;
 	use sp_runtime::{
-		traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Zero},
+		traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, IntegerSquareRoot, Zero},
 		Perbill,
 	};
 	use traits::MultiErc20;
@@ -30,12 +30,12 @@ pub mod pallet {
 	type TokenIdOf<T> =
 		<<T as Config>::Tokens as MultiErc20<<T as frame_system::Config>::AccountId>>::TokenId;
 
-	const FEE: Perbill = Perbill::from_percent(99); // 1% per trade
-
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
 		type Tokens: MultiErc20<Self::AccountId>;
+		#[pallet::constant]
+		type Fee: Get<Perbill>;
 	}
 
 	#[pallet::pallet]
@@ -191,6 +191,45 @@ pub mod pallet {
 
 		#[pallet::weight(1000)]
 		#[transactional]
+		pub fn deposit_single_token(
+			origin: OriginFor<T>,
+			token_id: TokenIdOf<T>,
+			amount: BalanceOf<T>,
+		) -> DispatchResult {
+			let sender = ensure_signed(origin)?;
+			Self::initialized()?;
+			let second_token = Self::get_paired_token(token_id).unwrap();
+			let address = Self::get_pool_address().unwrap();
+			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
+			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
+			let (token_to_swap, bought_paired_token) =
+				Self::calculate_single_token_ration(amount, first_reserve, second_reserve).unwrap();
+
+			Self::increase_liquidity(
+				&sender,
+				token_to_swap.checked_add(&bought_paired_token).unwrap(),
+			)?;
+			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
+
+			Self::deposit_event(Event::TokenBought(
+				sender.clone(),
+				token_id,
+				token_to_swap,
+				second_token,
+				bought_paired_token,
+			));
+			Self::deposit_event(Event::Deposited(
+				sender,
+				token_id,
+				amount.checked_sub(&token_to_swap).unwrap(),
+				second_token,
+				bought_paired_token,
+			));
+			Ok(())
+		}
+
+		#[pallet::weight(1000)]
+		#[transactional]
 		pub fn withdraw(origin: OriginFor<T>, share_percent: u32) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			Self::initialized()?;
@@ -224,7 +263,7 @@ pub mod pallet {
 
 		#[pallet::weight(1000)]
 		#[transactional]
-		pub fn withdraw_token(
+		pub fn withdraw_single_token(
 			origin: OriginFor<T>,
 			token_id: TokenIdOf<T>,
 			share_percent: u32,
@@ -259,20 +298,21 @@ pub mod pallet {
 				&sender,
 				first_token_amount.checked_add(&bought_first_token).unwrap(),
 			)?;
-			Self::deposit_event(Event::Withdrawed(
-				sender.clone(),
-				token_id,
-				first_token_amount,
-				second_token,
-				BalanceOf::<T>::default(),
-			));
 			Self::deposit_event(Event::TokenBought(
-				sender,
+				sender.clone(),
 				second_token,
 				second_token_amount,
 				token_id,
 				bought_first_token,
 			));
+			Self::deposit_event(Event::Withdrawed(
+				sender,
+				token_id,
+				first_token_amount,
+				second_token,
+				BalanceOf::<T>::default(),
+			));
+
 			Ok(())
 		}
 	}
@@ -283,11 +323,47 @@ pub mod pallet {
 			input_reserve: BalanceOf<T>,
 			output_reserve: BalanceOf<T>,
 		) -> Option<BalanceOf<T>> {
-			let input_amount_with_fee = FEE * input_amount;
+			let input_amount_with_fee = T::Fee::get() * input_amount;
 			input_amount_with_fee
 				.checked_mul(&output_reserve)
 				.unwrap()
 				.checked_div(&input_reserve.checked_add(&input_amount_with_fee).unwrap())
+		}
+
+		/// Calculate the amount of input token we need to swap for second token to achieve correct ratio
+		/// considering fee and the fact that token ration changed after we did token swap
+		fn calculate_single_token_ration(
+			input_amount: BalanceOf<T>,
+			input_reserve: BalanceOf<T>,
+			output_reserve: BalanceOf<T>,
+		) -> Option<(BalanceOf<T>, BalanceOf<T>)> {
+			let fee = T::Fee::get();
+			let two: BalanceOf<T> = 2u32.try_into().ok().unwrap();
+			let discriminant_sqrt = input_reserve
+				.integer_sqrt_checked()
+				.unwrap()
+				.checked_mul(
+					&((fee * fee * input_reserve)
+						.checked_add(&(fee * input_reserve.checked_mul(&two).unwrap()))
+						.unwrap()
+						.checked_add(&(fee * two * two.checked_mul(&input_amount).unwrap()))
+						.unwrap()
+						.checked_add(&input_reserve)
+						.unwrap()
+						.integer_sqrt_checked()
+						.unwrap()),
+				)
+				.unwrap();
+			let tokens_to_swap = discriminant_sqrt
+				.checked_sub(&input_reserve)
+				.unwrap()
+				.checked_sub(&(fee * input_reserve))
+				.unwrap()
+				.checked_div(&(fee * two))
+				.unwrap();
+
+			let bought = Self::price(tokens_to_swap, input_reserve, output_reserve).unwrap();
+			Some((tokens_to_swap, bought))
 		}
 
 		fn get_paired_token(token_id: TokenIdOf<T>) -> Option<TokenIdOf<T>> {

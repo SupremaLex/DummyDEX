@@ -281,9 +281,14 @@ impl pallet_erc20::Config for Runtime {
 	type Balance = Balance;
 }
 
+parameter_types! {
+    pub const Fee: Perbill = Perbill::from_percent(99); // 1% per trade
+}
+
 impl pallet_dex::Config for Runtime {
 	type Event = Event;
 	type Tokens = Erc20;
+	type Fee = Fee;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.

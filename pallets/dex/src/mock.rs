@@ -6,6 +6,7 @@ use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
+	Perbill,
 };
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
@@ -80,9 +81,14 @@ impl pallet_erc20::Config for Test {
 	type Balance = u128;
 }
 
+parameter_types! {
+	pub const Fee: Perbill = Perbill::from_percent(99); // 1% per trade
+}
+
 impl pallet_dex::Config for Test {
 	type Event = Event;
 	type Tokens = Erc20;
+	type Fee = Fee;
 }
 
 // Build genesis storage according to the mock runtime.
