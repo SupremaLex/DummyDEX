@@ -47,12 +47,8 @@ pub mod pallet {
 	pub(super) type PoolAddress<T: Config> = StorageValue<_, T::AccountId>;
 
 	#[pallet::storage]
-	#[pallet::getter(fn get_first_token)]
-	pub(super) type FirstToken<T: Config> = StorageValue<_, TokenIdOf<T>>;
-
-	#[pallet::storage]
-	#[pallet::getter(fn get_second_token)]
-	pub(super) type SecondToken<T: Config> = StorageValue<_, TokenIdOf<T>>;
+	#[pallet::getter(fn get_token_ids)]
+	pub(super) type TokenIds<T: Config> = StorageValue<_, (TokenIdOf<T>, TokenIdOf<T>)>;
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_total_liquidity)]
@@ -121,8 +117,7 @@ pub mod pallet {
 			let total_liquidity = first_token_amount.checked_add(&second_token_amount).unwrap();
 			TotalLiquidity::<T>::put(total_liquidity);
 			Liquidity::<T>::insert(&sender, total_liquidity);
-			FirstToken::<T>::put(first_token_id);
-			SecondToken::<T>::put(second_token_id);
+			TokenIds::<T>::put((first_token_id, second_token_id));
 			PoolAddress::<T>::put(&pool_address);
 			Self::deposit_event(Event::Initialized(
 				sender,
@@ -237,8 +232,7 @@ pub mod pallet {
 			let share_percent = Perbill::from_percent(share_percent);
 
 			let address = Self::get_pool_address().unwrap();
-			let token_1 = Self::get_first_token().unwrap();
-			let token_2 = Self::get_second_token().unwrap();
+			let (token_1, token_2) = Self::get_token_ids().unwrap();
 			let first_reserve = T::Tokens::balance_of(token_1, &address)?;
 			let second_reserve = T::Tokens::balance_of(token_2, &address)?;
 			let total_liquidity = Self::get_total_liquidity().unwrap();
@@ -367,8 +361,7 @@ pub mod pallet {
 		}
 
 		fn get_paired_token(token_id: TokenIdOf<T>) -> Option<TokenIdOf<T>> {
-			let token_1 = Self::get_first_token().unwrap();
-			let token_2 = Self::get_second_token().unwrap();
+			let (token_1, token_2) = Self::get_token_ids().unwrap();
 			match token_id {
 				t1 if t1 == token_1 => Some(token_2),
 				t2 if t2 == token_2 => Some(token_1),
@@ -389,8 +382,7 @@ pub mod pallet {
 
 		pub fn get_total_reward() -> Result<BalanceOf<T>, sp_runtime::DispatchError> {
 			let address = Self::get_pool_address().unwrap();
-			let token_1 = Self::get_first_token().unwrap();
-			let token_2 = Self::get_second_token().unwrap();
+			let (token_1, token_2) = Self::get_token_ids().unwrap();
 			let liquidity_with_fees = T::Tokens::balance_of(token_1, &address)?
 				+ T::Tokens::balance_of(token_2, &address)?;
 			Ok(liquidity_with_fees.checked_sub(&Self::get_total_liquidity().unwrap()).unwrap())

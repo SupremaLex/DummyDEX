@@ -49,8 +49,7 @@ fn init_should_work() {
 		approve(ALICE, total_supply);
 		init_dex(100, 1000);
 		assert_eq!(Dex::get_pool_address(), Some(POOL));
-		assert_eq!(Dex::get_first_token(), Some(TOKEN_1_ID));
-		assert_eq!(Dex::get_second_token(), Some(TOKEN_2_ID));
+		assert_eq!(Dex::get_token_ids(), Some((TOKEN_1_ID, TOKEN_2_ID)));
 		assert_eq!(Dex::get_liquidity(ALICE), 1100 * MIL);
 		assert_eq!(Dex::get_liquidity(BOB), 0);
 	});
