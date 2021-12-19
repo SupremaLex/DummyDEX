@@ -22,18 +22,18 @@ pub mod pallet {
 		traits::{CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, IntegerSquareRoot, Zero},
 		Perbill,
 	};
-	use traits::MultiErc20;
+	use traits::Erc1155;
 
 	type BalanceOf<T> =
-		<<T as Config>::Tokens as MultiErc20<<T as frame_system::Config>::AccountId>>::Balance;
+		<<T as Config>::Tokens as Erc1155<<T as frame_system::Config>::AccountId>>::Balance;
 
 	type TokenIdOf<T> =
-		<<T as Config>::Tokens as MultiErc20<<T as frame_system::Config>::AccountId>>::TokenId;
+		<<T as Config>::Tokens as Erc1155<<T as frame_system::Config>::AccountId>>::TokenId;
 
 	#[pallet::config]
 	pub trait Config: frame_system::Config {
 		type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
-		type Tokens: MultiErc20<Self::AccountId>;
+		type Tokens: Erc1155<Self::AccountId>;
 		#[pallet::constant]
 		type Fee: Get<Perbill>;
 	}
@@ -107,12 +107,11 @@ pub mod pallet {
 					&& pool_address != T::AccountId::default(),
 				Error::<T>::WrongInitialization
 			);
-			T::Tokens::transfer_from(&first_token_id, &sender, &pool_address, first_token_amount)?;
-			T::Tokens::transfer_from(
-				&second_token_id,
+			T::Tokens::transfer_from_batch(
 				&sender,
 				&pool_address,
-				second_token_amount,
+				&vec![first_token_id, second_token_id],
+				&vec![first_token_amount, second_token_amount],
 			)?;
 			let total_liquidity = first_token_amount.checked_add(&second_token_amount).unwrap();
 			TotalLiquidity::<T>::put(total_liquidity);
@@ -141,13 +140,12 @@ pub mod pallet {
 			Self::initialized()?;
 			Self::has_liquidity()?;
 			let token_to_buy = Self::get_paired_token(token_id).unwrap();
-			let address = Self::get_pool_address().unwrap();
-			let input_reserve = T::Tokens::balance_of(token_id, &address)?;
-			let output_reserve = T::Tokens::balance_of(token_to_buy, &address)?;
-			let bought = Self::price(amount, input_reserve, output_reserve).unwrap();
-
-			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
-			T::Tokens::transfer(&token_to_buy, &address, &sender, bought)?;
+			let pool = Self::get_pool_address().unwrap();
+			let reserves =
+				T::Tokens::balance_of_batch(vec![&pool, &pool], vec![token_id, token_to_buy])?;
+			let bought = Self::price(amount, reserves[0], reserves[1]).unwrap();
+			T::Tokens::transfer_from_single(&sender, &pool, &token_id, &amount)?;
+			T::Tokens::transfer(&pool, &sender, token_to_buy, bought)?;
 			Self::deposit_event(Event::TokenBought(sender, token_id, amount, token_to_buy, bought));
 			Ok(())
 		}
@@ -161,24 +159,26 @@ pub mod pallet {
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			Self::initialized()?;
-			let second_token = Self::get_paired_token(token_id).unwrap();
-			let address = Self::get_pool_address().unwrap();
-			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
-			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
-			let second_token_amount = amount
-				.checked_mul(&second_reserve)
-				.unwrap()
-				.checked_div(&first_reserve)
-				.unwrap();
+			let paired_token = Self::get_paired_token(token_id).unwrap();
+			let pool = Self::get_pool_address().unwrap();
+			let reserves =
+				T::Tokens::balance_of_batch(vec![&pool, &pool], vec![token_id, paired_token])?;
+			let second_token_amount =
+				amount.checked_mul(&reserves[1]).unwrap().checked_div(&reserves[0]).unwrap();
 
 			Self::increase_liquidity(&sender, amount.checked_add(&second_token_amount).unwrap())?;
-			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
-			T::Tokens::transfer_from(&second_token, &sender, &address, second_token_amount)?;
+			T::Tokens::transfer_from_batch(
+				&sender,
+				&pool,
+				&vec![token_id, paired_token],
+				&vec![amount, second_token_amount],
+			)?;
+
 			Self::deposit_event(Event::Deposited(
 				sender,
 				token_id,
 				amount,
-				second_token,
+				paired_token,
 				second_token_amount,
 			));
 			Ok(())
@@ -193,31 +193,31 @@ pub mod pallet {
 		) -> DispatchResult {
 			let sender = ensure_signed(origin)?;
 			Self::initialized()?;
-			let second_token = Self::get_paired_token(token_id).unwrap();
-			let address = Self::get_pool_address().unwrap();
-			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
-			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
+			let paired_token = Self::get_paired_token(token_id).unwrap();
+			let pool = Self::get_pool_address().unwrap();
+			let reserves =
+				T::Tokens::balance_of_batch(vec![&pool, &pool], vec![token_id, paired_token])?;
 			let (token_to_swap, bought_paired_token) =
-				Self::calculate_single_token_ration(amount, first_reserve, second_reserve).unwrap();
+				Self::calculate_single_token_ration(amount, reserves[0], reserves[1]).unwrap();
 
 			Self::increase_liquidity(
 				&sender,
 				token_to_swap.checked_add(&bought_paired_token).unwrap(),
 			)?;
-			T::Tokens::transfer_from(&token_id, &sender, &address, amount)?;
+			T::Tokens::transfer_from_single(&sender, &pool, &token_id, &amount)?;
 
 			Self::deposit_event(Event::TokenBought(
 				sender.clone(),
 				token_id,
 				token_to_swap,
-				second_token,
+				paired_token,
 				bought_paired_token,
 			));
 			Self::deposit_event(Event::Deposited(
 				sender,
 				token_id,
 				amount.checked_sub(&token_to_swap).unwrap(),
-				second_token,
+				paired_token,
 				bought_paired_token,
 			));
 			Ok(())
@@ -231,20 +231,19 @@ pub mod pallet {
 			ensure!(share_percent > 0 && share_percent <= 100, Error::<T>::WrongShareValue);
 			let share_percent = Perbill::from_percent(share_percent);
 
-			let address = Self::get_pool_address().unwrap();
+			let pool = Self::get_pool_address().unwrap();
 			let (token_1, token_2) = Self::get_token_ids().unwrap();
-			let first_reserve = T::Tokens::balance_of(token_1, &address)?;
-			let second_reserve = T::Tokens::balance_of(token_2, &address)?;
+			let reserves = T::Tokens::balance_of_batch(vec![&pool, &pool], vec![token_1, token_2])?;
 			let total_liquidity = Self::get_total_liquidity().unwrap();
 
 			let share_percent = share_percent
 				* Perbill::from_rational(Self::get_liquidity(&sender), total_liquidity);
-			let first_token_amount = share_percent * first_reserve;
-			let second_token_amount = share_percent * second_reserve;
+			let first_token_amount = share_percent * reserves[0];
+			let second_token_amount = share_percent * reserves[1];
 
 			Self::decrease_liquidity(&sender, share_percent * total_liquidity)?;
-			T::Tokens::transfer(&token_1, &address, &sender, first_token_amount)?;
-			T::Tokens::transfer(&token_2, &address, &sender, second_token_amount)?;
+			T::Tokens::transfer(&pool, &sender, token_1, first_token_amount)?;
+			T::Tokens::transfer(&pool, &sender, token_2, second_token_amount)?;
 			Self::deposit_event(Event::Withdrawed(
 				sender,
 				token_1,
@@ -269,32 +268,32 @@ pub mod pallet {
 				Perbill::from_percent(share_percent) * Self::get_pool_share(&sender);
 			ensure!(share_percent != Perbill::from_percent(0), Error::<T>::NoLiquiudityToWithdraw);
 
-			let address = Self::get_pool_address().unwrap();
-			let second_token = Self::get_paired_token(token_id).unwrap();
-			let first_reserve = T::Tokens::balance_of(token_id, &address)?;
-			let second_reserve = T::Tokens::balance_of(second_token, &address)?;
+			let pool = Self::get_pool_address().unwrap();
+			let paired_token = Self::get_paired_token(token_id).unwrap();
+			let reserves =
+				T::Tokens::balance_of_batch(vec![&pool, &pool], vec![token_id, paired_token])?;
 			let total_liquidity = Self::get_total_liquidity().unwrap();
 
-			let first_token_amount = share_percent * first_reserve;
-			let second_token_amount = share_percent * second_reserve;
+			let first_token_amount = share_percent * reserves[0];
+			let second_token_amount = share_percent * reserves[1];
 
 			let bought_first_token = Self::price(
 				second_token_amount,
-				second_reserve,
-				first_reserve.checked_sub(&first_token_amount).unwrap(),
+				reserves[1],
+				reserves[0].checked_sub(&first_token_amount).unwrap(),
 			)
 			.unwrap();
 
 			Self::decrease_liquidity(&sender, share_percent * total_liquidity)?;
 			T::Tokens::transfer(
-				&token_id,
-				&address,
+				&pool,
 				&sender,
+				token_id,
 				first_token_amount.checked_add(&bought_first_token).unwrap(),
 			)?;
 			Self::deposit_event(Event::TokenBought(
 				sender.clone(),
-				second_token,
+				paired_token,
 				second_token_amount,
 				token_id,
 				bought_first_token,
@@ -303,7 +302,7 @@ pub mod pallet {
 				sender,
 				token_id,
 				first_token_amount,
-				second_token,
+				paired_token,
 				BalanceOf::<T>::default(),
 			));
 
@@ -381,10 +380,10 @@ pub mod pallet {
 		}
 
 		pub fn get_total_reward() -> Result<BalanceOf<T>, sp_runtime::DispatchError> {
-			let address = Self::get_pool_address().unwrap();
+			let pool = Self::get_pool_address().unwrap();
 			let (token_1, token_2) = Self::get_token_ids().unwrap();
-			let liquidity_with_fees = T::Tokens::balance_of(token_1, &address)?
-				+ T::Tokens::balance_of(token_2, &address)?;
+			let liquidity_with_fees =
+				T::Tokens::balance_of(&pool, token_1)? + T::Tokens::balance_of(&pool, token_2)?;
 			Ok(liquidity_with_fees.checked_sub(&Self::get_total_liquidity().unwrap()).unwrap())
 		}
 

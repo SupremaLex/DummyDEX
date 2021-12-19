@@ -8,9 +8,9 @@ publish = false
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
 
-[dependencies.pallet-erc20]
+[dependencies.pallet-erc1155]
 default-features = false
-path = '../../pallets/erc20'
+path = '../../pallets/erc1155'
 version = '0.1.0'
 
 [dependencies.traits]

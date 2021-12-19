@@ -3569,7 +3569,7 @@ dependencies = [
  "pallet-aura",
  "pallet-balances",
  "pallet-dex",
- "pallet-erc20",
+ "pallet-erc1155",
  "pallet-grandpa",
  "pallet-randomness-collective-flip",
  "pallet-sudo",
@@ -3818,7 +3818,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "pallet-balances",
- "pallet-erc20",
+ "pallet-erc1155",
  "parity-scale-codec",
  "scale-info",
  "sp-core",
@@ -3829,7 +3829,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "pallet-erc20"
+name = "pallet-erc1155"
 version = "0.1.0"
 dependencies = [
  "frame-benchmarking",

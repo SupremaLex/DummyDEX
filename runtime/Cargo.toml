@@ -17,9 +17,9 @@ default-features = false
 path = '../pallets/dex'
 version = '0.1.0'
 
-[dependencies.pallet-erc20]
+[dependencies.pallet-erc1155]
 default-features = false
-path = '../pallets/erc20'
+path = '../pallets/erc1155'
 version = '0.1.0'
 
 [build-dependencies.substrate-wasm-builder]
@@ -220,7 +220,7 @@ std = [
     'pallet-randomness-collective-flip/std',
     'pallet-sudo/std',
     'pallet-dex/std',
-    'pallet-erc20/std',
+    'pallet-erc1155/std',
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',

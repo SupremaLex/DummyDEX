@@ -1,7 +1,7 @@
 use crate as pallet_dex;
 use frame_support::parameter_types;
 use frame_system as system;
-use pallet_erc20;
+use pallet_erc1155;
 use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
@@ -20,7 +20,7 @@ frame_support::construct_runtime!(
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
 		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-		Erc20: pallet_erc20::{Pallet, Call, Storage, Event<T>},
+		PalletErc1155: pallet_erc1155::{Pallet, Call, Storage, Event<T>},
 		Dex: pallet_dex::{Pallet, Call, Storage, Event<T>},
 	}
 );
@@ -75,10 +75,15 @@ impl pallet_balances::Config for Test {
 	type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
 }
 
-impl pallet_erc20::Config for Test {
+parameter_types! {
+	pub const Decimals: u32 = 6;
+}
+
+impl pallet_erc1155::Config for Test {
 	type Event = Event;
 	type TokenId = u32;
 	type Balance = u128;
+	type Decimals = Decimals;
 }
 
 parameter_types! {
@@ -87,7 +92,7 @@ parameter_types! {
 
 impl pallet_dex::Config for Test {
 	type Event = Event;
-	type Tokens = Erc20;
+	type Tokens = PalletErc1155;
 	type Fee = Fee;
 }
 

@@ -1,5 +1,5 @@
 [package]
-name = "pallet-erc20"
+name = "pallet-erc1155"
 version = "0.1.0"
 edition = "2021"
 

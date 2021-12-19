@@ -42,7 +42,7 @@ pub use sp_runtime::{Perbill, Permill};
 
 /// Import the template pallet.
 pub use pallet_dex;
-pub use pallet_erc20;
+pub use pallet_erc1155;
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -275,10 +275,15 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
-impl pallet_erc20::Config for Runtime {
+parameter_types! {
+    pub const Decimals: u32 = 6;
+}
+
+impl pallet_erc1155::Config for Runtime {
 	type Event = Event;
 	type TokenId = u32;
 	type Balance = Balance;
+	type Decimals = Decimals;
 }
 
 parameter_types! {
@@ -287,7 +292,7 @@ parameter_types! {
 
 impl pallet_dex::Config for Runtime {
 	type Event = Event;
-	type Tokens = Erc20;
+	type Tokens = Erc1155;
 	type Fee = Fee;
 }
 
@@ -307,7 +312,7 @@ construct_runtime!(
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
 		Dex: pallet_dex,
-		Erc20: pallet_erc20,
+		Erc1155: pallet_erc1155,
 	}
 );
 

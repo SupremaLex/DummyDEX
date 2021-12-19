@@ -1,4 +1,4 @@
-use crate as pallet_erc20;
+use crate as pallet_erc1155;
 use frame_support::parameter_types;
 use frame_system as system;
 use sp_core::H256;
@@ -18,7 +18,7 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		Erc20: pallet_erc20::{Pallet, Call, Storage, Event<T>},
+		Erc1155: pallet_erc1155::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
@@ -53,10 +53,15 @@ impl system::Config for Test {
 	type OnSetCode = ();
 }
 
-impl pallet_erc20::Config for Test {
+parameter_types! {
+	pub const Decimals: u32 = 6;
+}
+
+impl pallet_erc1155::Config for Test {
 	type Event = Event;
 	type TokenId = u32;
 	type Balance = u128;
+	type Decimals = Decimals;
 }
 
 // Build genesis storage according to the mock runtime.
